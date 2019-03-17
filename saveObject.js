@@ -1,4 +1,3 @@
-var request = require("request");
 var fs = require('fs');
 var objectStore = require('./services/objectStore.js');
 var logger = require('./logger');
@@ -45,6 +44,13 @@ async function getShippingsData(period) {
     }
 }//getShippingsData
 
+function dateFromString(dateString) {
+    var parts =dateString.split('-');
+    var parts2 =parts[2].split('T');
+    var time = parts2[1].split(':')
+    return new Date(parts[0],parts[1]-1,parts2[0],time[0],time[1],time[2]);
+}
+
 async function runShippingExtractionJob(objectName, input) {
     var period = input.period || 'day'
     logger.log('info', `runShippingExtractionJob for ${JSON.stringify(input)} for period ${period}`)
@@ -63,6 +69,21 @@ async function runShippingExtractionJob(objectName, input) {
     try {
         logger.log('info', `Go get shippings from Logistics MS`)
         var shippings = await getShippingsData(period)
+        // enrich shippings 
+        shippings.forEach(
+            function(shipping) {
+                shipping._source.totalItemCount = shipping._source.items.reduce(function sum(total, item){return total+ item.itemCount},0) 
+                shipping._source.lastUpdatedTimestamp = shipping._source.auditTrail.reduce(function last(previous, auditEntry){return auditEntry.timestamp},null) 
+                shipping._source.numberOfActions = shipping._source.auditTrail.length 
+                // var t1 = shipping._source.lastUpdatedTimestamp
+                // console.log(t1)
+                // var d1= dateFromString(t1)
+                // var t2= shipping._source.submissionDate
+                // console.log(t2)
+                // var d2= dateFromString(t2)
+                shipping._source.processingTime = (dateFromString(shipping._source.lastUpdatedTimestamp) -dateFromString(shipping._source.submissionDate))/1000   // time delta between shipping._source.lastUpdatedTimestamp and shipping._source.submissionDate 
+            }
+        )
 
         // see https://www.npmjs.com/package/json2csv   
 
@@ -71,7 +92,9 @@ async function runShippingExtractionJob(objectName, input) {
         const fields = ['_id', '_source.orderIdentifier', '_source.nameAddressee', '_source.destination.country'
             , '_source.shippingMethod', '_source.destination.city', '_source.destination.coordinates.lat', '_source.destination.coordinates.lon'
             , '_source.shippingStatus', '_source.shippingCosts', '_source.submissionDate'
-            , '_source.items.productIdentifier', '_source.items.itemCount'];
+            , '_source.items.productIdentifier', '_source.items.itemCount'
+            , '_source.totalItemCount', '_source.lastUpdatedTimestamp','_source.numberOfActions', '_source.processingTime'
+        ];
         const json2csvParser = new Json2csvParser({ fields, unwind: '_source.items' });
         const csv = json2csvParser.parse(shippings);
         logger.log('info', `Parsing to CSV is complete, size of CSV document: ${csv.length}`)
@@ -92,7 +115,7 @@ async function runShippingExtractionJob(objectName, input) {
         return `The shippings report was saved to OCI ObjectStorage in bucket ${parameters.bucketName} under the name ${parameters.objectName}`
 
     } catch (err) {
-        logger.log('error', `Something went wrong ${JSON, stringify(err)}`)
+        logger.log('error', `Something went wrong ${JSON.stringify(err)}`)
         console.error(err);
     }
 
