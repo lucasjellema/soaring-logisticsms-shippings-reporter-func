@@ -1,0 +1,42 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: shippings-reporter-job
+  namespace: soaring-clouds
+spec:
+  # once every 25 minutes - see https://crontab.guru/ 
+  schedule: "*/25 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostAliases:
+          - ip: "129.146.14.202"
+            hostnames:
+             - "identity.us-phoenix-1.oraclecloud.com"
+          - ip: "130.35.0.169"
+            hostnames:
+             - "functions.us-phoenix-1.oraclecloud.com"
+          - ip: "130.35.1.96"
+            hostnames:
+             - "nub6pzh46mq.us-phoenix-1.functions.oci.oraclecloud.com"
+          - ip: "169.46.82.169"
+            hostnames:
+             - "logs2.papertrailapp.com"
+          containers:
+          - name: shippings-reporter-job
+            image: lucasjellema/faas-runner:1.0
+            args:
+            - /bin/sh
+            - -c
+            - /tmp/invokeFunction.sh '{"period":"day", "additional information":"none"}'
+            env:
+            - name: "FUNCTIONS_COMPARTMENT"
+              value: "amis-functions-compartment"
+            - name: "FUNCTIONS_APPLICATION"
+              value: "soaring"
+            - name: "FUNCTION"
+              value: "shippings-reporter-func"
+
+          restartPolicy: OnFailure
+
