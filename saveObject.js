@@ -51,6 +51,25 @@ function dateFromString(dateString) {
     return new Date(parts[0],parts[1]-1,parts2[0],time[0],time[1],time[2]);
 }
 
+function formattedDate(date) {
+    var mm = date.getMonth() + 1; // getMonth() is zero-based
+    var dd = date.getDate();
+
+    var hh = date.getHours() 
+    var mi = date.getMinutes();
+    var ss = date.getSeconds();
+  
+    return [date.getFullYear(),
+            (mm>9 ? '' : '0') + mm,
+            (dd>9 ? '' : '0') + dd
+           ].join('-')
+           +'T'
+           + [(hh>9 ? '' : '0')+hh,
+            (mi>9 ? '' : '0') + mi,
+            (ss>9 ? '' : '0') + ss
+           ].join(':');
+  };
+
 async function runShippingExtractionJob(objectName, input) {
     var period = input.period || 'day'
     logger.log('info', `runShippingExtractionJob for ${JSON.stringify(input)} for period ${period}`)
@@ -81,7 +100,11 @@ async function runShippingExtractionJob(objectName, input) {
                 // var t2= shipping._source.submissionDate
                 // console.log(t2)
                 // var d2= dateFromString(t2)
-                shipping._source.processingTime = (dateFromString(shipping._source.lastUpdatedTimestamp) -dateFromString(shipping._source.submissionDate))/1000   // time delta between shipping._source.lastUpdatedTimestamp and shipping._source.submissionDate 
+                var lastUpdated = dateFromString(shipping._source.lastUpdatedTimestamp);
+                var submissionDate = dateFromString(shipping._source.submissionDate);
+                shipping._source.lastUpdatedTimestamp = formattedDate(lastUpdated)
+                shipping._source.submissionDate = formattedDate(submissionDate)
+                shipping._source.processingTime = (lastUpdated -submissionDate)/1000   // time delta between shipping._source.lastUpdatedTimestamp and shipping._source.submissionDate 
             }
         )
 
@@ -108,7 +131,6 @@ async function runShippingExtractionJob(objectName, input) {
         // });
         parameters.body = csv
         parameters.objectName = `shippings${(new Date()).toISOString().substring(0, 10)}.csv`
-        //parameters['content-type']='application/csv'
         logger.log('info', `Saving to Object Storage as ${parameters.objectName}`)
         objectStore.obj.put(auth, parameters, callback);
         logger.log('info', `The shippings report was saved to OCI ObjectStorage in bucket ${parameters.bucketName} under the name ${parameters.objectName}`)
@@ -128,4 +150,4 @@ module.exports = {
 }
 
 // test call
-runShippingExtractionJob("shippings-20190316.csv", { period: 'day', content: "My extra very very special Content", moreContent: "Something completely different", value: 34 })
+runShippingExtractionJob("shippings-20190320.csv", { period: 'day', content: "My extra very very special Content", moreContent: "Something completely different", value: 34 })
